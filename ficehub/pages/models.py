@@ -156,6 +156,7 @@ class Comment(models.Model):
         self.save()
         self.user.update_rating()
 
+
 @receiver(post_save, sender=Post)
 def update_user_rating_on_post_save(sender, instance, **kwargs):
     instance.user.update_rating()
