@@ -20,4 +20,11 @@ from pages import views
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('', views.index),
+    path('my_profile/', views.main, name='main'),
+    path('register', views.register_page, name='register'),
+    path('login', views.login_page, name='login'),
+    path('logout', views.logout_page, name='logout'),
+    path('profile/<int:user_id>', views.profile, name='profile'),
+
 ]

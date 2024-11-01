@@ -22,31 +22,32 @@ class User(AbstractUser):
     slug = models.SlugField(max_length=100, unique=True, blank=True)
     registration_date = models.DateTimeField(auto_now_add=True)
     birthdate = models.DateField(null=True, blank=True)
-    group = models.ForeignKey(Group, on_delete=models.CASCADE, related_name="posts", blank=True)
+    group = models.ForeignKey(Group, on_delete=models.CASCADE, related_name="users", blank=True)
     email = models.EmailField(unique=True)
     telegram = models.CharField(max_length=50, blank=True)
     password = models.CharField(max_length=128)
     is_blocked = models.BooleanField(default=False)
-    is_admin = models.BooleanField(default=False)
+    is_staff = models.BooleanField(default=False)
     image = models.ImageField(upload_to='profiles/', blank=True, null=True)
     redirect_url = models.URLField(blank=True, null=True)
     rating = models.FloatField(default=0.0)
 
     def save(self, *args, **kwargs):
         if not self.slug:
-            self.slug = slugify(self.name)
+            self.slug = slugify(self.username)
         super().save(*args, **kwargs)
-
 
     def update_rating(self):
         posts = self.posts.all()
         comments = self.comments.all()
         if posts.exists():
             total_rating = sum(post.rating for post in posts) + sum(comment.rating for comment in comments)
-            self.rating = total_rating / (posts.count() + comments.count())
+            total_count = posts.count() + comments.count()
+            self.rating = total_rating / total_count
         else:
             self.rating = 0
         self.save()
+
     def __str__(self):
        return f"{self.username}"
 
@@ -135,7 +136,7 @@ class Post(models.Model):
 
 class Comment(models.Model):
     post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name="comments")
-    author = models.ForeignKey(User, on_delete=models.CASCADE)
+    author = models.ForeignKey(User, on_delete=models.CASCADE, related_name="comments")
     content = models.TextField()
     parent = models.ForeignKey(
         'self', on_delete=models.CASCADE, null=True, blank=True, related_name="replies"
