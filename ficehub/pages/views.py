@@ -3,10 +3,12 @@ from django.contrib.auth.hashers import make_password, check_password
 from django.core.exceptions import ValidationError
 from django.http import HttpResponseRedirect
 from django.shortcuts import get_object_or_404, render, redirect
-from .forms import PostSearchForm, CommentForm
+from mypy.dmypy.client import request
+from django.contrib.auth import login
+from .forms import PostSearchForm, PostForm, PostUpdateForm, CommentForm, RegistrationForm
 from bestiaria.settings import ENCRYPTION_KEY
 from pages.auth import require_guest, require_login
-from pages.models import Post
+from pages.models import Post, User, Comment, Category, Image
 from django.db.models import Q
 from django.views.generic import TemplateView, ListView
 from django.core.mail import send_mail
@@ -18,8 +20,15 @@ from django.contrib.auth import logout
 
 
 def main_page(request):
-    posts = Post.objects.all().order_by('-created_at')
     form = PostSearchForm(request.GET or None)
+    sort_option = request.GET.get('sort', 'newest')
+    if sort_option == 'views':
+        posts = Post.objects.all().order_by('-views')
+    elif sort_option == 'rating':
+        posts = Post.objects.all().order_by('-rating')
+    else:
+        posts = Post.objects.all().order_by('-created_at')
+
     if form.is_valid():
         category = form.cleaned_data.get('category')
         hashtags = form.cleaned_data.get('hashtags')
@@ -41,15 +50,19 @@ def main_page(request):
                 Q(hashtags__name__icontains=search_text)
             ).distinct()
     posts = form.cleaned_data.get('posts')
-
-    return render(request, )
+    context = {
+        "posts": posts,
+        "form": form,
+        "sort_option": sort_option,
+    }
+    return render(request, context)
 
 @login_required
 def user_admin_page(request):
     user = request.user
     is_admin = user.is_staff
     users = User.objects.all() if is_admin else None
-    posts = Post.objects.filter(author=user) if not is_admin else None
+    posts = Post.objects.filter(author=user)
 
     context = {
         'user': user,
@@ -60,13 +73,73 @@ def user_admin_page(request):
     return render(request, 'admin_page.html', context)
 
 
+@login_required
+def create_post(request):
+    if request.method == 'POST':
+        form = PostForm(request.POST, request.FILES)
+        if form.is_valid():
+            post = form.save(commit=False)
+            post.author = request.user
+            post.save()
+
+            # Handle multiple image uploads
+            images = request.FILES.getlist('images')
+            for image_file in images:
+                Image.objects.create(post=post, image=image_file)
+
+            return redirect('post_detail', slug=post.slug)
+    else:
+        form = PostForm()
+    return render(request, 'create_post.html', {'form': form})
+
+
+@login_required
+def edit_post(request, slug):
+    post = get_object_or_404(Post, slug=slug)
+
+    # Ensure that only the author can edit
+    if post.author != request.user:
+        return redirect('post_detail', slug=slug)
+
+    if request.method == 'POST':
+        form = PostUpdateForm(request.POST, instance=post)
+        if form.is_valid():
+            form.save()
+            return redirect('post_detail', slug=post.slug)
+    else:
+        form = PostUpdateForm(instance=post)
+
+    return render(request, 'edit_post.html', {'form': form, 'post': post})
+
+@login_required
+def delete_post(request, slug):
+    post = get_object_or_404(Post, slug=slug)
+    if post.author != request.user and not request.user.is_staff:
+        return redirect('post_detail', slug=slug)
+    else:
+        post.delete()
+        previous_page = request.META.get('HTTP_REFERER')
+        if previous_page:
+            return redirect(previous_page)
+        else:
+            return redirect('/')
+
 def post_detail(request, slug):
     post = get_object_or_404(Post, slug=slug)
     comments = Comment.objects.filter(post=post)
-
+    if request.method == 'POST':
+        form = CommentForm(request.POST, request.FILES)
+        if form.is_valid():
+            comment = form.save(commit=False)
+            comment.author = request.user
+            comment.save()
+            return redirect('post_detail', slug=post.slug)
+    else:
+        form = CommentForm()
     context = {
         'post': post,
         'comments': comments,
+        'form': form,
     }
     return render(request, 'post_detail.html', context)
 
@@ -108,7 +181,7 @@ def group_detail(request):
 def profile(request, slug):
     user = get_object_or_404(User, slug=slug)
     if request.user == user:
-        return redirect('user_admin_page')
+        return redirect('admin')
     posts_count = user.posts.count()
     comments_count = user.comments.count()
 
@@ -119,16 +192,31 @@ def profile(request, slug):
     }
     return render(request, 'profile.html', context)
 
-def register(request):
+def register_view(request):
     if request.method == 'POST':
         form = RegistrationForm(request.POST)
         if form.is_valid():
             user = form.save()
-            login(request, user)  # Log the user in after registration
-            return redirect('profile_update')  # Redirect to profile update page
+            login(request, user)
+            return redirect('/')
     else:
         form = RegistrationForm()
-    return render(request, 'registration/register.html', {'form': form})
+    return render(request, 'register.html', {'form': form})
+
+def login_view(request):
+    if request.method == 'POST':
+        form = AuthenticationForm(request, data=request.POST)
+        if form.is_valid():
+            username = form.cleaned_data.get('username')
+            password = form.cleaned_data.get('password')
+            user = authenticate(request, username=username, password=password)
+            if user is not None:
+                login(request, user)
+                messages.success(request, "Login successful.")
+                return redirect('/')
+    else:
+        form = AuthenticationForm()
+    return render(request, 'login.html', {'form': form})
 
 def logout_view(request):
     logout(request)

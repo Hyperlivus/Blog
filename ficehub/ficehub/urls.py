@@ -18,10 +18,18 @@ from django.contrib import admin
 from django.urls import path
 from pages import views
 
+from ficehub.pages.views import create_post, post_detail
+
 urlpatterns = [
-    path('admin/', admin.site.urls),
-    path('', views.index),
-    path('my_profile/', views.main, name='main'),
+    path('', views.main_page, name='main'),
+    path('admin/', admin.site.urls, name='admin'),
+    path('create_post/', views.create_post),
+    path('<slug:slug>/edit_post/', views.edit_post),
+    path('<slug:slug>/delete/', views.delete_post),
+    path('<slug:slug>/', views,post_detail),
+    path(),
+    path(),
+    path('accounts/', include('allauth.urls')),  # for google login
     path('register', views.register_page, name='register'),
     path('login', views.login_page, name='login'),
     path('logout', views.logout_page, name='logout'),

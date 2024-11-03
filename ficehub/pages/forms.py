@@ -49,8 +49,13 @@ class PostForm(forms.ModelForm):
 
     class Meta:
         model = Post
-        fields = ['title', 'text', 'hashtags', 'image']
+        fields = ['name', 'text', 'hashtags', 'image']
+        images = forms.ImageField(widget=forms.ClearableFileInput(attrs={'multiple': True}), required=False)
 
+class PostUpdateForm(forms.ModelForm):
+    class Meta:
+        model = Post
+        fields = ['name', 'text']
 
 class CommentForm(forms.ModelForm):
     class Meta:
